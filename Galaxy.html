@@ -1,0 +1,236 @@
+<html>
+  <head>
+    <title>CM20219 – Coursework 2 – WebGL</title>
+      <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <style>
+      body { margin: 0; overflow: hidden; }
+      canvas { width: 100%; height: 100%; }
+    </style>
+  </head>
+  <body>
+    <script src="scripts\three.js"></script>
+    <script>
+      "use strict"; // https://stackoverflow.com/q/1335851/72470
+
+      // Global variables that are available in all functions.
+      // Note: You can add your own here, e.g. to store the rendering mode.
+      var camera, scene, renderer;
+      var planets = [],
+          stars =[],
+          spherical = new THREE.Spherical(),
+          lookAtTarget =  new THREE.Vector3(0, 0, 0);
+      
+      // Initialise the scene, and draw it for the first time.
+      init();
+      animate();
+
+      // Listen for keyboard events, to react to them.
+      // Note: there are also other event listeners, e.g. for mouse events.
+      document.addEventListener('keydown', handleKeyDown);
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mousewheel', mouseWheelHandler);
+      document.addEventListener("contextmenu", function(event){event.preventDefault();});
+
+      // Scene initialisation. This function is only run once, at the very beginning.
+      function init(){
+        scene = new THREE.Scene();
+        
+        // Set up the camera, move it to (15, 20, 20) and look at the origin (0, 0, 0).
+        camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(15, 20, 20);
+        camera.lookAt(lookAtTarget);
+
+        // Basic ambient lighting.
+        var lighting = new THREE.HemisphereLight(0xffffff, 0x0f0f0f, 0.25);
+        scene.add(lighting);
+
+        generateSystem(0xffffff, 10000000, new THREE.Vector3(0,0,0), 10);
+        for(var i=0; i<5; i++){
+          generateSystem(0xffffff, 10000000*Math.random()+10000000, new THREE.Vector3(Math.random()*500 -250,Math.random()*500 - 250,Math.random()*500 -250), 10*Math.random()+5);
+        }
+        
+
+        var geometry = new THREE.Geometry();
+        for ( var i = 0; i < 10000; i ++ ) {
+          var vertex = new THREE.Vector3();
+          vertex.x = Math.random()*2000 -1000;
+          vertex.y = Math.random()*2000 - 1000;
+          vertex.z = Math.random()*2000 - 1000;
+          geometry.vertices.push( vertex );
+        }
+        var sky = new THREE.Points(geometry, new THREE.PointsMaterial({color: 0x888888}));
+        scene.add(sky);
+
+        // Set up the Web GL renderer.
+        renderer = new THREE.WebGLRenderer({antialias: true});
+        renderer.shadowMap.enabled = true;
+        renderer.setPixelRatio(window.devicePixelRatio); // HiDPI/retina rendering
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Handle resizing of the browser window.
+        window.addEventListener('resize', handleResize, false);
+      }
+
+      // Handle resizing of the browser window.
+      function handleResize(){
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      function generateSystem(colour, centerMass, position, numberOfPlanets){
+        var loader = new THREE.TextureLoader();
+        var sunTexture = loader.load('images/sun.jpg');
+
+        var geometry = new THREE.SphereGeometry(5, 16, 16);
+        geometry.computeFaceNormals();
+        geometry.computeVertexNormals();
+        var material = new THREE.MeshBasicMaterial({color: 0xffffff, map:sunTexture});
+        var sun = new THREE.Mesh(geometry, material);
+        sun.position.copy(position);
+        
+        sun.userData.mass = centerMass;
+        sun.userData.tilt = [Math.random()*2*Math.PI - Math.PI,Math.random()*2*Math.PI - Math.PI, Math.random()*2*Math.PI - Math.PI];
+        var pointlight = new THREE.PointLight(0xffffff,1,200,2);
+        pointlight.position.copy(position);
+        pointlight.castShadow = true; 
+        scene.add(pointlight);
+        stars.push(sun);
+        scene.add(sun);
+        for(var i=2; i<numberOfPlanets+2; i++){
+          generatePlanet(colour, Math.random()*i*i + 10, stars[stars.length -1]);
+        }
+      }
+
+      function generateMoon(colour, planet, orbitRadius){
+        var geometry = new THREE.SphereGeometry(planet.geometry.parameters.radius/4, 8, 8);
+        geometry.computeFaceNormals();
+        geometry.computeVertexNormals();
+        
+        var material = new THREE.MeshPhongMaterial({color: colour});
+        var moon = new THREE.Mesh(geometry, material);
+        moon.position.set(planet.geometry.parameters.radius,0,planet.geometry.parameters.radius);
+        moon.castShadow = true;
+        moon.receiveShadow = true;
+        planet.add(moon);
+      }
+
+      function generatePlanet(colour, orbitRadius, star){
+        var centerMass = star.userData.mass;
+        // create the planet
+        var speed = Math.sqrt(0.00000000006754*centerMass/orbitRadius);
+        if(Math.random()<0.5){
+          speed = -speed;
+        }
+        //  Create the planet
+        var geometry = new THREE.SphereGeometry(Math.random()*orbitRadius/10, 16, 16);
+        geometry.computeFaceNormals();
+        geometry.computeVertexNormals();
+        planets.push(new THREE.Mesh(geometry, new THREE.MeshPhongMaterial({color: colour})));
+
+
+        //  Initial postions and rotation
+        planets[planets.length - 1].position.x = Math.cos(Math.random() * 2*Math.PI) * orbitRadius;
+        planets[planets.length - 1].position.z = Math.sin(Math.random() * 2*Math.PI) * orbitRadius;
+        planets[planets.length - 1].rotation.y += speed*Math.random()*100;
+
+        //  Custom variables for each planet to define raduis, speed and what star it belongs too.
+        planets[planets.length - 1].userData.orbitRadius = orbitRadius;
+        planets[planets.length - 1].userData.star = star;
+        planets[planets.length - 1].userData.speed = speed;
+
+        //  Set up shadow casting and receiving
+        planets[planets.length - 1].castShadow = true;
+        planets[planets.length - 1].receiveShadow = true;
+        
+        // create the orbit outline
+        var geometry = new THREE.CircleGeometry( orbitRadius, 32 );
+        geometry.vertices.shift();
+        geometry.computeLineDistances();
+        var material = new THREE.LineDashedMaterial({
+          color: 0x202020,
+          dashSize: 0.4
+        });
+        var outline = new THREE.LineLoop(geometry, material);
+        outline.rotation.x = -Math.PI/2;
+
+        var tilt = new THREE.Object3D();
+        tilt.position.copy(star.position);
+        tilt.rotation.x = star.userData.tilt[0];
+        tilt.rotation.y = star.userData.tilt[1];
+        tilt.rotation.z = star.userData.tilt[2];
+        tilt.add(planets[planets.length - 1]);
+        tilt.add(outline);
+        scene.add(tilt);
+
+        if(Math.random()<0.5){
+          generateMoon(0xff00ff, planets[planets.length - 1], 10);
+        }
+      }
+
+      function orbit(obj){
+        spherical.setFromVector3(obj.position);
+        spherical.radius = obj.userData.orbitRadius;
+        spherical.theta += obj.userData.speed;
+        obj.position.setFromSpherical(spherical);
+        obj.rotation.y += 0.05;
+      }
+      // Animation loop function. This function is called whenever an update is required.
+      function animate(){
+        requestAnimationFrame(animate);
+        for(var i=0; i<planets.length; i++){
+          orbit(planets[i]);
+        }
+        for(var i=0; i<stars.length; i++){
+          stars[i].rotation.y += 0.0005;
+        }
+        
+        
+        // Render the current scene to the screen.
+        renderer.render(scene, camera);
+      }
+
+      // Handle keyboard presses.
+      function handleKeyDown(event){
+        switch (event.keyCode){
+          case 38: // up
+            generateSystem(0xffffff, 10000000*Math.random()+10000000, new THREE.Vector3(Math.random()*500 -250,Math.random()*500 - 250,Math.random()*500 -250), 10);
+          break
+        }
+      }
+
+      function onMouseMove(event) {
+        var ydist = event.movementY*0.002;
+        var xdist = -event.movementX*0.002;
+        if(event.buttons == 2){
+          var radius = camera.position.length();
+          camera.translateY(ydist*radius);
+          camera.translateX(xdist*radius);
+
+          var deltax = new THREE.Vector3().setFromMatrixColumn( camera.matrix, 0 );
+          var deltay = new THREE.Vector3().setFromMatrixColumn( camera.matrix, 1 );
+
+          deltax.multiplyScalar(xdist*radius);
+          deltay.multiplyScalar(ydist*radius);
+
+          lookAtTarget.add(deltay).add(deltax);
+
+        }
+        if(event.buttons == 1){
+          spherical.setFromVector3(camera.position.sub(lookAtTarget)); //relative postion vector from target to camera
+          spherical.theta += xdist;
+          spherical.phi -= ydist;
+          spherical.phi = Math.max(0, Math.min( Math.PI, spherical.phi )); //0 < phi < pi
+          spherical.makeSafe();
+          camera.position.setFromSpherical(spherical).add(lookAtTarget); //set relative postion from spherical and then make global coordiate
+          camera.lookAt(lookAtTarget);
+        }
+      }
+      function mouseWheelHandler(event){
+        camera.translateZ(event.deltaY*0.01);
+      }
+    </script>
+  </body>
+</html>
