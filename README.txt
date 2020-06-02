@@ -1,4 +1,4 @@
-For WebGL-Coursework.html
+For WebGL.html
 	Keybinds
 	x - rotate object about x axis
 	y - rotate object about y axis
